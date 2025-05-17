@@ -1,20 +1,12 @@
 # BvM
-Code for the paper "Bernstein–von Mises for Adaptively Collected Data"
-
-Install dependencies:
+Generating data (Total runtime ~5hr):
 
 ```
-pip install numpy scipy matplotlib
-```
-
-Generating data:
-
-```
-python3 vanilla.py && python3 batched.py && python3 contextual.py && python3 lqr.py
+python vanilla.py && python batched.py && python contextual.py && python lqr.py
 ```
 
 Generating Plots:
 
 ```
-python3 plot_vanilla.py && python3 plot_batched.py && python3 plot_contextual.py && python3 plot_lqr.py
+python plot_vanilla.py && python plot_batched.py && python plot_contextual.py && python plot_lqr.py
 ```
