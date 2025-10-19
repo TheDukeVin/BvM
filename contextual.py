@@ -1,7 +1,8 @@
 
-
+import scipy
 import numpy as np
 import time
+from common import *
 
 np.random.seed(42)
 
@@ -15,7 +16,7 @@ n_rounds = 1000
 
 n_arms = 3
 d = 2
-alpha = 0.1
+alpha = 0.05
 
 SAMPLING_STD = 1
 
@@ -56,6 +57,9 @@ def runContextual(n_sims, n_arms, d, n_rounds, alpha, theta):
     minPulls = np.zeros(n_rounds)
     diff_mean_est = np.zeros(n_rounds)
     diff_var_est = np.zeros(n_rounds)
+    coverage = np.zeros(n_rounds)
+
+    confidence_cutoff = getEllipseCutoff(alpha, (n_arms * d) - 1)
 
     for t in range(n_rounds):
         context = np.random.normal(loc=0, scale=1, size=(n_sims, d))
@@ -111,6 +115,17 @@ def runContextual(n_sims, n_arms, d, n_rounds, alpha, theta):
         TV_est[t] = TVsamples.mean()
         TV_se[t] = TVsamples.std() / np.sqrt(n_sims)
 
+        '''Compute Coverage'''
+
+        diff = posteriorMean - theta
+
+        z_score = np.matmul(diff.reshape(n_sims, n_arms, 1, d), 
+                            np.matmul(np.linalg.inv(posteriorVar), 
+                                      diff.reshape(n_sims, n_arms, d, 1))).sum(axis=1) ** 0.5
+        # print(z_score)
+        # print(confidence_cutoff)
+        coverage[t] = (z_score < confidence_cutoff).mean()
+
         '''Get min arm pulls'''
 
         minPulls[t] = armCounts.min(axis=1).mean()
@@ -120,7 +135,7 @@ def runContextual(n_sims, n_arms, d, n_rounds, alpha, theta):
         tmp = np.power(posteriorVar - bvmVar, 2)
         tmp[tmp > 1] = 1
         diff_var_est[t] = np.sum(tmp)
-    return TV_est, TV_se, minPulls, diff_mean_est / (n_sims * n_arms), diff_var_est / (n_sims * n_arms)
+    return TV_est, TV_se, minPulls, diff_mean_est / (n_sims * n_arms), diff_var_est / (n_sims * n_arms), coverage
 
 if __name__ == '__main__':
 
@@ -132,11 +147,13 @@ if __name__ == '__main__':
     minPulls = np.zeros((3, n_rounds))
     diff_mean = np.zeros((3, n_rounds))
     diff_var = np.zeros((3, n_rounds))
+    coverage = np.zeros((3, n_rounds))
 
     for i, theta in enumerate(allTheta):
-        tv[i, :], tv_se[i, :], minPulls[i, :], diff_mean[i, :], diff_var[i, :] = runContextual(n_sims, n_arms, d, n_rounds, alpha, theta)
+        tv[i, :], tv_se[i, :], minPulls[i, :], diff_mean[i, :], diff_var[i, :], coverage[i, :] = runContextual(n_sims, n_arms, d, n_rounds, alpha, theta)
 
     print("Finished running contextual bandit, Time: " + str(time.time() - start_time))
 
     np.savetxt('data/contextual_tv.txt', tv)
     np.savetxt('data/contextual_tvse.txt', tv_se)
+    np.savetxt('data/contextual_coverage.txt', coverage)

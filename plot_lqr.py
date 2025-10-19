@@ -20,3 +20,20 @@ ax.set_title("NCEC on LQR")
 plt.legend()
 plt.tight_layout()
 plt.savefig("img/lqr")
+
+
+
+
+fig, ax = plt.subplots(figsize = (8, 6))
+
+for i in range(3):
+    mean_coverage = np.loadtxt(f'data/lqr_coverage{i}.txt')
+    ax.plot(mean_coverage, label=labels[i])
+
+ax.set_xlabel('Time')
+ax.set_ylabel('Coverage')
+ax.set_title("NCEC on LQR")
+plt.hlines(0.95, 1, T, color="black", linestyle="dotted")
+plt.legend()
+plt.tight_layout()
+plt.savefig("img/lqr_coverage")

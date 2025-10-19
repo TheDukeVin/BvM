@@ -1,6 +1,7 @@
 
 import numpy as np
 import time
+import scipy
 import scipy.special as sc
 
 np.random.seed(42)
@@ -44,7 +45,7 @@ all_configs = [
     ('poisson', poisson_means, (np.full(2, 1), np.full(2, 1)))
 ]
 
-def runBandit(armMeans, kind, alg, n_rounds, n_sims, priorParams):
+def runBandit(armMeans, kind, alg, n_rounds, n_sims, priorParams, alpha):
 
     n_arms = len(armMeans)
     numPulls = np.full((n_sims, n_arms), 1)
@@ -53,9 +54,13 @@ def runBandit(armMeans, kind, alg, n_rounds, n_sims, priorParams):
     tv_est = np.zeros(n_rounds)
     tv_se = np.zeros(n_rounds)
 
+    coverage = np.zeros((n_rounds, n_arms))
+
     for t in range(n_rounds):
         if alg == 'ucb':
             chosenArms = np.argmax(sumReward / numPulls + np.sqrt(2*np.log(t+1) / numPulls), axis=1)
+        if alg == 'unif':
+            chosenArms = np.full(n_sims, t % n_arms)
         
         if kind == 'gaussian':
             observedReward = np.random.normal(loc=armMeans[chosenArms], scale=np.sqrt(GAUSSIAN_BANDIT_VAR))
@@ -91,6 +96,9 @@ def runBandit(armMeans, kind, alg, n_rounds, n_sims, priorParams):
             posteriorMean = posteriorVar * (BvMmean / BvMvar + priorMean / priorVar)
         
             posteriorpdf = np.prod(1/np.sqrt(2 * np.pi * posteriorVar) * np.exp(-np.power(samples - posteriorMean, 2) / (2 * posteriorVar)), axis=1)
+
+            q = scipy.stats.norm.ppf(1-alpha/2)
+            coverage[t] = (np.abs((posteriorMean - armMeans) / np.sqrt(posteriorVar)) < q).mean(axis=0)
         
         elif kind == 'bernoulli':
             priorAlpha, priorBeta = priorParams
@@ -103,6 +111,9 @@ def runBandit(armMeans, kind, alg, n_rounds, n_sims, priorParams):
             logpdf = np.sum(np.log(samples)*(posteriorAlpha-1) + np.log(1-samples)*(posteriorBeta-1) 
                             + sc.loggamma(posteriorAlpha + posteriorBeta) - sc.loggamma(posteriorAlpha) - sc.loggamma(posteriorBeta), axis=1)
             posteriorpdf = np.exp(logpdf)
+
+            quantile_of_true = scipy.stats.beta.cdf(armMeans[None, :], posteriorAlpha, posteriorBeta)
+            coverage[t] = ((alpha/2 < quantile_of_true) * (quantile_of_true < 1-alpha/2)).mean(axis=0)
         
         elif kind == 'poisson':
             priorAlpha, priorBeta = priorParams
@@ -114,6 +125,9 @@ def runBandit(armMeans, kind, alg, n_rounds, n_sims, priorParams):
                             + np.log(posteriorBeta)*posteriorAlpha - sc.loggamma(posteriorAlpha), axis=1)
             posteriorpdf = np.exp(logpdf)
 
+            quantile_of_true = scipy.stats.gamma.cdf(armMeans[None, :], a=posteriorAlpha, scale=1/posteriorBeta)
+            coverage[t] = ((alpha/2 < quantile_of_true) * (quantile_of_true < 1-alpha/2)).mean(axis=0)
+
         tmp = 1 - posteriorpdf / BvMpdf
 
         tmp[tmp < 0] = 0
@@ -121,8 +135,10 @@ def runBandit(armMeans, kind, alg, n_rounds, n_sims, priorParams):
         tv_est[t] = tmp.mean()
         tv_se[t] = tv_est.std() / n_sims
 
+        
+
     print("Standard Error Ratio: " + str((tv_se/tv_est).max()))
-    return tv_est, tv_se
+    return tv_est, tv_se, coverage
 
 if __name__ == '__main__':
 
@@ -131,13 +147,15 @@ if __name__ == '__main__':
 
     for kind, means, priors in all_configs:
         for i, config in enumerate(means):
-            tv_est, tv_se = runBandit(armMeans=np.array(config),
+            tv_est, tv_se, coverage = runBandit(armMeans=np.array(config),
                                     kind=kind,
                                     alg='ucb',
                                     n_rounds=n_rounds,
                                     n_sims=n_sims,
-                                    priorParams=priors)
+                                    priorParams=priors,
+                                    alpha=0.05)
             np.savetxt(f"data/vanilla_{kind}_{i}_TV", tv_est)
             np.savetxt(f"data/vanilla_{kind}_{i}_TVSE", tv_se)
+            np.savetxt(f"data/vanilla_{kind}_{i}_coverage", coverage)
 
     print("Finished running vanilla bandit, Time: " + str(time.time() - start_time))

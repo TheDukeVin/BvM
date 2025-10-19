@@ -3,6 +3,7 @@ import numpy as np
 from scipy.linalg import solve_discrete_are
 from scipy import stats
 import time
+from common import *
 
 T=1000
 numSim = 1000
@@ -17,6 +18,7 @@ tau2=1
 sigma2=1
 beta=0.5
 alpha=0
+confidence_level = 0.05
 
 config0 = {
     'x0': np.array([0, 0]),
@@ -104,7 +106,7 @@ def least_squares_estimation(X, U, X_next):
     return A_hat, B_hat
 
 def stepwise_noisy_cec(x0, A_true, B_true, Q, R, 
-                        K0, Cx, CK, tau2, sigma2, beta, alpha, T):
+                        K0, Cx, CK, tau2, sigma2, beta, alpha, T, confidence_level):
     """Algorithm 1: Stepwise Noisy Certainty Equivalent Control."""
     n, d = B_true.shape
     x = x0.reshape(n, 1)
@@ -120,6 +122,10 @@ def stepwise_noisy_cec(x0, A_true, B_true, Q, R,
 
     TV_dist_est = np.zeros(T)
     TV_dist_est[0] = TV_dist_est[1] = 1
+    coverage = np.zeros(T)
+    coverage[0] = coverage[1] = 1
+
+    confidence_cutoff = getEllipseCutoff(confidence_level, (n*(n+d)) - 1)
 
      # Initial actions with stabilizing controller and noise
     for _ in range(2):
@@ -171,9 +177,9 @@ def stepwise_noisy_cec(x0, A_true, B_true, Q, R,
 
         Z = np.vstack((X_mat, U_mat))
         BvMmean = X_next_mat @ np.linalg.pinv(Z)
-        BvMvar = sigma2 * np.linalg.inv(Z @ Z.T + np.eye(n+d)*1e-03)
+        BvMvar = sigma2 * np.linalg.inv(Z @ Z.T + np.eye(n+d)*1e-02)
 
-        posteriorVar = np.linalg.inv(Z @ Z.T / sigma2 + priorVar + np.eye(n+d)*1e-03)
+        posteriorVar = np.linalg.inv(Z @ Z.T / sigma2 + priorVar + np.eye(n+d)*1e-02)
         posteriorMean = (X_next_mat @ Z.T / sigma2 + priorMean @ np.linalg.inv(priorVar)) @ posteriorVar.T
 
         # Draw samples from BvM distribution row by row and calculate their pdf
@@ -186,7 +192,11 @@ def stepwise_noisy_cec(x0, A_true, B_true, Q, R,
             posteriorpdf[i] = stats.multivariate_normal.pdf(sample, mean=posteriorMean[i, :], cov=posteriorVar)
         TV_dist_est[t] = max(0, 1 - posteriorpdf.prod() / BvMpdf.prod())
 
-    return TV_dist_est
+        diff = posteriorMean - np.hstack([A_true, B_true])
+        z_score = (diff * (diff @ np.linalg.inv(posteriorVar))).sum() ** 0.5
+        coverage[t] = z_score < confidence_cutoff
+
+    return TV_dist_est, coverage
 
 if __name__ == '__main__':
 
@@ -202,15 +212,19 @@ if __name__ == '__main__':
     for configID, config in enumerate(configs):
 
         agg = np.zeros((numSim, T))
+        coverage = np.zeros((numSim, T))
         for i in range(numSim):
             with open("data/progress.txt", 'w') as f:
                 f.write(f"{i} of {numSim}")
-            agg[i, :] = stepwise_noisy_cec(config['x0'], config['A_true'], config['B_true'], config['Q'], config['R'], config['K0'],
-                                            Cx, CK, tau2, sigma2, beta, alpha, T)
+            agg[i, :], coverage[i, :] = stepwise_noisy_cec(config['x0'], config['A_true'], config['B_true'], config['Q'], config['R'], config['K0'],
+                                            Cx, CK, tau2, sigma2, beta, alpha, T, confidence_level)
 
         mean_TV = agg.mean(axis=0)
         tv_se = agg.std(axis=0) / np.sqrt(numSim)
         print("Standard Error Ratio: " + str(np.nan_to_num(tv_se / mean_TV).max()))
         np.savetxt(f'data/lqr_tv{configID}.txt', mean_TV)
+
+        mean_coverage = coverage.mean(axis=0)
+        np.savetxt(f'data/lqr_coverage{configID}.txt', mean_coverage)
 
     print("Finished running LQR, Time: " + str(time.time() - start_time))
