@@ -1,4 +1,5 @@
 import pandas as pd
+import zipfile
 
 input_file = "all.csv"
 chunk_size = 100000  # number of rows per smaller file
@@ -8,3 +9,8 @@ for i, chunk in enumerate(pd.read_csv(input_file, chunksize=chunk_size)):
     output_file = f"partition/part_{i+1}.csv"
     chunk.to_csv(output_file, index=False)
     print(f"Wrote {output_file} ({len(chunk)} rows)")
+
+    with zipfile.ZipFile(f"partition/part_{i+1}.zip", mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        # Convert dataframe to CSV string (no temp file)
+        csv_data = chunk.to_csv(index=False)
+        zf.writestr(output_file, csv_data)

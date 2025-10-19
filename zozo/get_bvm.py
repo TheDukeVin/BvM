@@ -45,7 +45,9 @@ def computeBvM(counts, sums):
 
 for i in range(1, N_dfs+1):
 
-    df = pd.read_csv(f'states/state{i}.csv')
+    print(f"Processing {i} of {N_dfs}")
+
+    df = pd.read_csv(f'states/state_{i}.csv')
 
     bvm = []
 
@@ -59,4 +61,4 @@ for i in range(1, N_dfs+1):
     
     bvm = pd.DataFrame(bvm, columns=['Time', 'BvM', 'SE'])
 
-    bvm.to_csv(f'bvm/bvm{i}.csv')
+    bvm.to_csv(f'bvm/bvm_{i}.csv')

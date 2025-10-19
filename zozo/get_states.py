@@ -11,6 +11,8 @@ rewardSums = np.zeros(n_arms)
 
 for i in range(1, N_dfs+1):
 
+    print(f"Processing {i} of {N_dfs}")
+
     df = pd.read_csv(f'partition/part_{i}.csv')
 
     out_df = pd.DataFrame(columns=[f'count{i}' for i in range(n_arms)] +
@@ -22,4 +24,4 @@ for i in range(1, N_dfs+1):
 
         out_df.iloc[j] = np.concatenate([counts, rewardSums])
 
-    out_df.to_csv(f'states/state{i}.csv')
+    out_df.to_csv(f'states/state_{i}.csv')
